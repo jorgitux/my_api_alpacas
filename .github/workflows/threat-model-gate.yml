@@ -1,0 +1,55 @@
+name: DevSecOps ThreatAtlas Security Gate
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  threat-atlas-gate:
+    name: OWASP ThreatAtlas Compliance Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout del Código
+        uses: actions/checkout@v4
+
+      - name: Verificar postura de seguridad en OWASP ThreatAtlas
+        env:
+          THREATATLAS_URL: ${{ vars.THREATATLAS_URL }}
+          THREATATLAS_TOKEN: ${{ secrets.THREATATLAS_TOKEN }}
+          PRODUCT_ID: "2" #################################################### ID PRODUCT!!!
+        run: |
+          set -euo pipefail
+          
+          echo "Consultando estado de madurez de seguridad para el Producto ID: $PRODUCT_ID"
+          
+          RESPONSE=$(curl -sf \
+            -H "Authorization: Bearer $THREATATLAS_TOKEN" \
+            "$THREATATLAS_URL/api/products/$PRODUCT_ID/security-status?fail_on_critical=true&fail_on_unmitigated_high=true&min_mitigation_ratio=0.7")
+          
+          echo "$RESPONSE" | jq .
+
+          # Append a human-readable summary to the job page.
+          {
+            echo "## 🧠 Threat Model — $(echo "$RESPONSE" | jq -r .product_name)"
+            echo ""
+            echo "| Metric | Value |"
+            echo "|--------|-------|"
+            echo "| Total threats | $(echo "$RESPONSE" | jq -r .summary.total_threats) |"
+            echo "| Critical | $(echo "$RESPONSE" | jq -r .summary.by_severity.critical) |"
+            echo "| High | $(echo "$RESPONSE" | jq -r .summary.by_severity.high) |"
+            echo "| Mitigation ratio | $(echo "$RESPONSE" | jq -r '.summary.mitigation_ratio * 100 | floor')% |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          
+          PASS=$(echo "$RESPONSE" | jq -r '.pass')
+          
+          if [ "$PASS" = "false" ]; then
+            echo "::error title=Security Gate Failed::Se han detectado amenazas críticas sin mitigar en ThreatAtlas."
+            echo "Detalles del bloqueo:"
+            echo "$RESPONSE" | jq -r '.failures[]'
+            exit 1
+          fi
+          
+          echo "Security Gate APROBADO. Continuando con el despliegue..."
