@@ -2,5 +2,5 @@
 
 Pruebas para BLACK ALPACAS 2026
 
-- test Success (en ejecucion)
-- test Fail 
+- test Success
+- test Fail (en ejecucion previo)
